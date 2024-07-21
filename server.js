@@ -1,9 +1,10 @@
 const express = require('express');
 const { MongoClient } = require('mongodb');
-const morgan = require('morgan'); 
-const bodyParser = require('body-parser'); 
-const cors = require('cors'); 
+const morgan = require('morgan'); // HTTP request logger middleware
+const bodyParser = require('body-parser'); // Middleware for parsing request bodies
+const cors = require('cors'); // CORS middleware
 const app = express();
+const { v4: uuidv4 } = require('uuid');
 const port = 3000;
 
 
@@ -18,10 +19,10 @@ async function startServer() {
     const database = client.db('AudioDB');
     const booksCollection = database.collection('Books');
 
-
-    app.use(morgan('combined')); 
-    app.use(bodyParser.json()); 
-    app.use(cors());
+ 
+    app.use(morgan('combined')); // Log HTTP requests
+    app.use(bodyParser.json()); // Parse JSON request bodies
+    app.use(cors()); // Enable CORS
 
 
     app.get('/books', async (req, res) => {
@@ -34,12 +35,12 @@ async function startServer() {
       }
     });
 
-    // App running
+  
     app.get('/', async (req, res) => {
         res.json({message : "Application is running now"})
     })
 
-    // Endpoint to get a book by ID
+   
     app.get('/books/:id', async (req, res) => {
       try {
         const id = req.params.id;
@@ -55,7 +56,7 @@ async function startServer() {
       }
     });
 
-    // Endpoint to post a review for a book by ID
+   
     app.post('/books/:id/review', async (req, res) => {
         try {
           const id = req.params.id;
@@ -65,9 +66,15 @@ async function startServer() {
             return res.status(400).send('Invalid score or review');
           }
   
+          const reviewWithId = {
+            id: uuidv4(),
+            score,
+            review
+          };
+  
           const updateResult = await booksCollection.updateOne(
             { id: parseInt(id) },
-            { $push: { rating: { score, review } } }
+            { $push: { rating: reviewWithId } }
           );
   
           if (updateResult.modifiedCount === 1) {
@@ -80,6 +87,29 @@ async function startServer() {
           res.status(500).send('Error adding review');
         }
       });
+
+  
+    app.delete('/books/:bookId/review/:reviewId', async (req, res) => {
+        try {
+          const bookId = parseInt(req.params.bookId);
+          const reviewId = req.params.reviewId;
+  
+          const updateResult = await booksCollection.updateOne(
+            { id: bookId },
+            { $pull: { rating: { id: reviewId } } }
+          );
+  
+          if (updateResult.modifiedCount === 1) {
+            res.send('Review deleted successfully');
+          } else {
+            res.status(404).send('Book or review not found');
+          }
+        } catch (error) {
+          console.error('Error deleting review:', error);
+          res.status(500).send('Error deleting review');
+        }
+      });
+  
 
     app.listen(port, () => {
       console.log(`Server is running at http://localhost:${port}`);
